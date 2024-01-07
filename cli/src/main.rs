@@ -1,4 +1,6 @@
 use log::debug;
+use std::collections::HashSet;
+use std::process::Child;
 use std::{
     env,
     error::Error,
@@ -12,7 +14,7 @@ use std::{
     thread::sleep,
     time::{Duration, Instant},
 };
-use sysinfo::{Pid, System};
+use sysinfo::{Pid, ProcessRefreshKind, System};
 
 fn main() -> Result<(), Box<dyn Error>> {
     let args: Vec<String> = env::args().collect();
@@ -63,6 +65,44 @@ fn main() -> Result<(), Box<dyn Error>> {
         .expect("Couldn't find my process information");
     let my_parent_pid = me.parent().expect("Couldn't find my parent PID");
 
+    let kill_all_children = |subprocess: &mut Child,
+                             killed_subprocess_instant: &mut Option<Instant>,
+                             sys: &mut System| {
+        sys.refresh_processes_specifics(ProcessRefreshKind::everything().with_cpu());
+        let sub_pid = Pid::from_u32(subprocess.id());
+        let mut children: HashSet<Pid> = HashSet::new();
+        loop {
+            let mut did_find_new_descendant = false;
+            for (pid, p) in sys.processes().iter() {
+                if let Some(parent_pid) = p.parent() {
+                    if !children.contains(pid)
+                        && (parent_pid == sub_pid || children.contains(&parent_pid))
+                    {
+                        children.insert(*pid);
+                        did_find_new_descendant = true;
+                    }
+                }
+            }
+            if !did_find_new_descendant {
+                break;
+            }
+        }
+
+        debug!("Killing main child process {}", subprocess.id());
+        subprocess.kill()?;
+
+        for pid in children {
+            debug!("Killing descendant of child {}", pid);
+            if let Some(process) = sys.process(pid) {
+                let _ = process.kill();
+            }
+        }
+
+        *killed_subprocess_instant = Instant::now().into();
+
+        Ok::<(), std::io::Error>(())
+    };
+
     loop {
         match killed_subprocess_instant {
             Some(instant) => {
@@ -77,16 +117,14 @@ fn main() -> Result<(), Box<dyn Error>> {
                 // At most 5s after the signal was catched, give up and exit
                 if catched_termination_signal.load(Ordering::Relaxed) {
                     debug!("Received termination signal, killing process");
-                    killed_subprocess_instant = Instant::now().into();
-                    subprocess.kill()?;
+                    kill_all_children(&mut subprocess, &mut killed_subprocess_instant, &mut sys)?;
                 }
 
                 // Check if parent is running
                 // refresh_process returns false when the given PID can't be found anymore
                 if !sys.refresh_process(my_parent_pid) {
                     debug!("Parent process doesn't exist anymore, killing process");
-                    killed_subprocess_instant = Instant::now().into();
-                    subprocess.kill()?;
+                    kill_all_children(&mut subprocess, &mut killed_subprocess_instant, &mut sys)?;
                 }
             }
         }

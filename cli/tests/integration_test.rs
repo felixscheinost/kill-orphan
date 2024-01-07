@@ -128,6 +128,15 @@ fn kill_orphan_is_killed() -> Result<(), Box<dyn std::error::Error>> {
         assert!(next_line()
             .unwrap()
             .ends_with("Received termination signal, killing process"));
+
+        assert!(next_line()
+            .unwrap()
+            .contains(" Killing main child process "));
+
+        assert!(next_line()
+            .unwrap()
+            .contains(" Killing descendant of child "));
+
         assert!(next_line()
             .unwrap()
             .ends_with("Process exited with status: None"));
@@ -236,6 +245,14 @@ fn test_parent_dies() -> Result<(), Box<dyn std::error::Error>> {
     assert!(next_line()
         .unwrap()
         .contains(" Parent process doesn't exist anymore, killing process"));
+
+    assert!(next_line()
+        .unwrap()
+        .contains(" Killing main child process "));
+
+    assert!(next_line()
+        .unwrap()
+        .contains(" Killing descendant of child "));
 
     assert!(next_line()
         .unwrap()
