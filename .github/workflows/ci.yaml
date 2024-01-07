@@ -1,0 +1,16 @@
+name: CI
+
+on:
+    - push
+
+jobs:
+    test:
+        strategy:
+          matrix:
+            os: [ubuntu-latest, macos-latest]
+        runs-on: ${{ matrix.os }}
+        steps:
+            - uses: actions/checkout@v4
+            - uses: DeterminateSystems/nix-installer-action@v9
+            - uses: DeterminateSystems/magic-nix-cache-action@v2
+            - run: nix flake check
