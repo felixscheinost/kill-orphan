@@ -40,6 +40,15 @@ fn main() -> Result<(), Box<dyn Error>> {
         Arc::clone(&catched_termination_signal),
     )?;
 
+    let mut sys = System::new();
+    sys.refresh_processes();
+
+    let my_pid = process::id();
+    let me = sys
+        .process(Pid::from_u32(my_pid))
+        .expect("Couldn't find my process information");
+    let my_parent_pid = me.parent().expect("Couldn't find my parent PID");
+
     debug!(
         "Launching command: {:?}",
         args.iter().skip(1).collect::<Vec<&String>>()
@@ -55,15 +64,6 @@ fn main() -> Result<(), Box<dyn Error>> {
     debug!("Spawned process with pid {}", subprocess.id());
 
     let mut killed_subprocess_instant: Option<Instant> = None;
-
-    let mut sys = System::new();
-    sys.refresh_processes();
-
-    let my_pid = process::id();
-    let me = sys
-        .process(Pid::from_u32(my_pid))
-        .expect("Couldn't find my process information");
-    let my_parent_pid = me.parent().expect("Couldn't find my parent PID");
 
     let kill_all_children = |subprocess: &mut Child,
                              killed_subprocess_instant: &mut Option<Instant>,
