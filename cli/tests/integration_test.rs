@@ -5,6 +5,8 @@ use std::{
     io::Error,
     io::{BufRead, BufReader, Write},
     process::Command,
+    thread::sleep,
+    time::Duration,
 };
 use tempfile::NamedTempFile;
 
@@ -208,7 +210,7 @@ fn test_parent_dies() -> Result<(), Box<dyn std::error::Error>> {
 
     let line_pid = next_line().unwrap();
     assert!(line_pid.contains(" Spawned process with pid "));
-    let pid = line_pid
+    let child_pid = line_pid
         .split_ascii_whitespace()
         .last()
         .unwrap()
@@ -228,7 +230,7 @@ fn test_parent_dies() -> Result<(), Box<dyn std::error::Error>> {
 
     Command::new("kill")
         .arg("-0")
-        .arg(format!("{}", pid))
+        .arg(format!("{}", child_pid))
         .assert()
         .success();
 
@@ -258,6 +260,17 @@ fn test_parent_dies() -> Result<(), Box<dyn std::error::Error>> {
         .unwrap()
         .contains("Process exited with status: None"));
 
+    for _ in 1..10 {
+        let out = Command::new("kill")
+            .arg("-0")
+            .arg(format!("{}", kill_orphan_pid))
+            .output()?;
+        if !out.status.success() {
+            break;
+        }
+        sleep(Duration::from_millis(100));
+    }
+
     Command::new("kill")
         .arg("-0")
         .arg(format!("{}", kill_orphan_pid))
@@ -266,7 +279,7 @@ fn test_parent_dies() -> Result<(), Box<dyn std::error::Error>> {
 
     Command::new("kill")
         .arg("-0")
-        .arg(format!("{}", pid))
+        .arg(format!("{}", child_pid))
         .assert()
         .failure();
 
