@@ -14,7 +14,13 @@ use std::{
     thread::sleep,
     time::{Duration, Instant},
 };
-use sysinfo::{Pid, ProcessRefreshKind, System};
+cfg_if::cfg_if! {
+    if #[cfg(all(not(feature = "unknown-ci"), any(target_os = "linux", target_os = "android")))] {
+        use sysinfo::{set_open_files_limit, Pid, ProcessRefreshKind, System};
+    } else {
+        use sysinfo::{Pid, ProcessRefreshKind, System};
+    }
+}
 
 fn main() -> Result<(), Box<dyn Error>> {
     let args: Vec<String> = env::args().collect();
@@ -24,6 +30,18 @@ fn main() -> Result<(), Box<dyn Error>> {
     }
 
     env_logger::init();
+
+    // Set a low limit
+    // Our internal use of this program includes running a medium amount of long running processes on a big CI server
+    // The CI server has lots of processes running and by default this leads to kill-orphan using thousands of FDs to /proc/stat
+    cfg_if::cfg_if! {
+        if #[cfg(all(not(feature = "unknown-ci"), any(target_os = "linux", target_os = "android")))] {
+            if !set_open_files_limit(16) {
+                eprint!("kill-orphan: Failed to set open files limit");
+                exit(1);
+            }
+        }
+    }
 
     // Register signal handlers to intercept termination of this process
     let catched_termination_signal = Arc::new(AtomicBool::new(false));
