@@ -209,6 +209,7 @@ name = "kill-orphan"
 version = "0.1.0"
 dependencies = [
  "assert_cmd",
+ "cfg-if",
  "duct",
  "env_logger",
  "log",
